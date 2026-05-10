@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; font-src 'none'; frame-src 'none'; object-src 'none';">
+<title>IG Archive Viewer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0c0c0c;--s1:#141414;--s2:#1c1c1c;--s3:#242424;
+  --b1:rgba(255,255,255,0.06);--b2:rgba(255,255,255,0.11);--b3:rgba(255,255,255,0.18);
+  --tx:#edeae4;--mu:#777;--mu2:#555;
+  --gold:#e2c56e;--pink:#c96fa0;--red:#e06060;--green:#5ec47a;--blue:#6aa8d8;
+}
+body{background:var(--bg);color:var(--tx);font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;min-height:100vh;line-height:1.6}
+
+header{padding:1.5rem 2rem 1.2rem;border-bottom:.5px solid var(--b1);display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.hl{display:flex;align-items:baseline;gap:.8rem}
+header h1{font-size:1.1rem;font-weight:600;letter-spacing:-.02em}
+.hbadge{font-size:10px;color:var(--green);background:rgba(94,196,122,.1);border:.5px solid rgba(94,196,122,.25);border-radius:20px;padding:2px 8px;letter-spacing:.04em}
+.pnote{font-size:11px;color:var(--mu);display:flex;align-items:center;gap:5px}
+.pdot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
+
+#drop-area{margin:3rem auto;max-width:500px;border:1px dashed var(--b2);border-radius:18px;padding:3.5rem 2rem;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;position:relative}
+#drop-area:hover,#drop-area.over{border-color:var(--gold);background:rgba(226,197,110,.03)}
+#drop-area input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dem{font-size:2.5rem;margin-bottom:1rem}
+.dtitle{font-size:1.15rem;font-weight:600;letter-spacing:-.02em;margin-bottom:.5rem}
+.dsub{color:var(--mu);font-size:13px;line-height:1.7}
+.dsub code{font-family:ui-monospace,monospace;font-size:11px;color:var(--gold);background:rgba(226,197,110,.09);padding:1px 5px;border-radius:4px}
+
+.pbox{margin:0 auto 2rem;max-width:500px;background:rgba(94,196,122,.05);border:.5px solid rgba(94,196,122,.18);border-radius:10px;padding:.9rem 1.2rem;font-size:12px;color:#8ecfa0;line-height:1.6}
+.pbox strong{color:var(--green);font-weight:600}
+
+#loader{display:none;text-align:center;padding:4rem 2rem}
+.spin{width:28px;height:28px;border:2px solid var(--b2);border-top-color:var(--gold);border-radius:50%;animation:rot .7s linear infinite;margin:0 auto 1rem}
+@keyframes rot{to{transform:rotate(360deg)}}
+#loader p{font-size:13px;color:var(--mu)}
+
+#dashboard{display:none;padding:0 2rem 4rem}
+.ubar{padding:1.4rem 0 1rem;border-bottom:.5px solid var(--b1);margin-bottom:1.4rem;display:flex;align-items:center;gap:1rem}
+.av{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--pink));display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:700;color:#111;flex-shrink:0}
+.um h2{font-size:1rem;font-weight:600}
+.um p{font-size:11px;color:var(--mu);font-family:ui-monospace,monospace}
+
+.sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:1.8rem}
+.sc{background:var(--s1);border:.5px solid var(--b1);border-radius:10px;padding:.9rem 1rem}
+.sl{font-size:10px;color:var(--mu);letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px}
+.sv{font-size:1.5rem;font-weight:700;letter-spacing:-.03em;color:var(--tx)}
+.sv.g{color:var(--gold)}.sv.p{color:var(--pink)}.sv.r{color:var(--red)}.sv.gr{color:var(--green)}
+
+.tabs{display:flex;border-bottom:.5px solid var(--b1);margin-bottom:1.5rem;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tb{background:none;border:none;color:var(--mu);font:inherit;font-size:13px;padding:.55rem 1rem;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s,border-color .15s}
+.tb:hover{color:var(--tx)}
+.tb.on{color:var(--gold);border-bottom-color:var(--gold)}
+.tb.ghost-tab.on{color:var(--red);border-bottom-color:var(--red)}
+.panel{display:none}.panel.on{display:block}
+
+/* Ghost section */
+.ghero{background:linear-gradient(135deg,rgba(224,96,96,.08),rgba(201,111,160,.05));border:.5px solid rgba(224,96,96,.2);border-radius:14px;padding:1.4rem;margin-bottom:1.4rem;display:flex;align-items:center;gap:1.2rem}
+.gicon{font-size:2.2rem;flex-shrink:0}
+.gtext h3{font-size:1rem;font-weight:600;margin-bottom:3px}
+.gtext p{font-size:12px;color:var(--mu);line-height:1.5}
+.gcnt{margin-left:auto;text-align:right;flex-shrink:0}
+.gcnt .num{font-size:2rem;font-weight:700;color:var(--red);letter-spacing:-.03em}
+.gcnt .lbl{font-size:10px;color:var(--mu);text-transform:uppercase;letter-spacing:.05em}
+
+.ggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:7px;max-height:480px;overflow-y:auto;padding-right:3px}
+.ggrid::-webkit-scrollbar{width:3px}
+.ggrid::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
+
+.gc{background:var(--s1);border:.5px solid rgba(224,96,96,.15);border-radius:8px;padding:.65rem .9rem;display:flex;flex-direction:column;gap:3px;transition:border-color .15s}
+.gc:hover{border-color:rgba(224,96,96,.35)}
+.gc.blue{border-color:rgba(106,168,216,.15)}.gc.blue:hover{border-color:rgba(106,168,216,.35)}
+.gcn{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gcd{font-size:10px;color:var(--mu);font-family:ui-monospace,monospace}
+.gcl{font-size:10px;color:var(--blue);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gcl:hover{text-decoration:underline}
+
+.sublabel{font-size:10px;color:var(--mu);text-transform:uppercase;letter-spacing:.06em;font-family:ui-monospace,monospace;margin-bottom:.7rem;margin-top:1.4rem;display:flex;align-items:center;gap:8px}
+.sublabel::after{content:'';flex:1;height:.5px;background:var(--b1)}
+
+/* Person lists */
+.plist{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:7px;max-height:430px;overflow-y:auto;padding-right:3px}
+.plist::-webkit-scrollbar{width:3px}
+.plist::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
+.pi{background:var(--s1);border:.5px solid var(--b1);border-radius:8px;padding:.6rem .9rem;display:flex;flex-direction:column;gap:2px}
+.pin{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pid{font-size:10px;color:var(--mu);font-family:ui-monospace,monospace}
+
+/* Posts */
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;max-height:480px;overflow-y:auto;padding-right:3px}
+.pgrid::-webkit-scrollbar{width:3px}
+.pgrid::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
+.pc{background:var(--s1);border:.5px solid var(--b1);border-radius:9px;padding:.85rem 1rem}
+.pcc{font-size:13px;color:var(--tx);line-height:1.5;margin-bottom:7px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.pcm{font-size:11px;color:var(--mu);font-family:ui-monospace,monospace;display:flex;gap:8px;align-items:center}
+.pt{background:rgba(226,197,110,.1);color:var(--gold);border-radius:4px;padding:1px 5px;font-size:10px}
+
+/* Files */
+.ftree{background:var(--s1);border:.5px solid var(--b1);border-radius:10px;overflow:hidden;max-height:400px;overflow-y:auto}
+.ftree::-webkit-scrollbar{width:3px}
+.ftree::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
+.fr{display:flex;align-items:center;gap:10px;padding:.5rem .9rem;border-bottom:.5px solid var(--b1);transition:background .1s}
+.fr:last-child{border-bottom:none}
+.fr.click{cursor:pointer}
+.fr.click:hover{background:var(--s2)}
+.fi{font-size:13px;flex-shrink:0}
+.fn{font-family:ui-monospace,monospace;font-size:11px;color:var(--tx);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fs{font-family:ui-monospace,monospace;font-size:10px;color:var(--mu)}
+
+.sb{margin-bottom:.9rem}
+.sb input,.sinput{width:100%;background:var(--s1);border:.5px solid var(--b2);border-radius:8px;color:var(--tx);font:inherit;font-size:13px;padding:.5rem .85rem;outline:none;transition:border-color .15s}
+.sb input:focus,.sinput:focus{border-color:var(--gold)}
+.sb input::placeholder,.sinput::placeholder{color:var(--mu2)}
+
+.empty{text-align:center;padding:2.5rem;color:var(--mu);font-size:13px}
+.seclab{font-size:10px;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.8rem}
+
+#jmodal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:center;justify-content:center}
+#jmodal.open{display:flex}
+.jpanel{background:var(--s1);border:.5px solid var(--b3);border-radius:14px;width:min(840px,93vw);max-height:80vh;display:flex;flex-direction:column;overflow:hidden}
+.jhead{padding:.85rem 1.2rem;border-bottom:.5px solid var(--b1);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.jhead span{font-family:ui-monospace,monospace;font-size:12px;color:var(--gold)}
+.jhead button{background:none;border:none;color:var(--mu);cursor:pointer;font-size:16px;line-height:1;padding:2px 4px;transition:color .15s;border-radius:4px}
+.jhead button:hover{color:var(--tx);background:var(--b1)}
+#jcontent{overflow-y:auto;flex:1;padding:1rem 1.2rem;font-family:ui-monospace,monospace;font-size:11.5px;line-height:1.7;white-space:pre-wrap;word-break:break-all;color:#bbb}
+#jcontent::-webkit-scrollbar{width:4px}
+#jcontent::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hl">
+    <h1>IG Archive Viewer</h1>
+    <span class="hbadge">100% local</span>
+  </div>
+  <div class="pnote">
+    <div class="pdot"></div>
+    No data uploaded — everything stays in your browser
+  </div>
+</header>
+
+<div id="drop-area">
+  <input type="file" id="fi" accept=".zip">
+  <div class="dem">📦</div>
+  <div class="dtitle">Drop your Instagram archive</div>
+  <div class="dsub">Drag and drop your <code>.zip</code> archive here or click to browse</div>
+</div>
+
+<div class="pbox">
+  <strong>🔒 Audit sécurité appliqué</strong> — Ce fichier ne fait aucune requête réseau avec tes données. Google Fonts a été retiré (suppression du seul appel externe inutile). La seule librairie externe est JSZip (code open-source, 0 octet de tes données transmis). Tes fichiers sont lus dans la RAM de ton navigateur uniquement, et détruits à la fermeture de la page. Vérifiable dans DevTools → Network.
+</div>
+
+<div id="loader">
+  <div class="spin"></div>
+  <p>Extracting and analyzing archive…</p>
+</div>
+
+<div id="dashboard">
+  <div class="ubar">
+    <div class="av" id="av">?</div>
+    <div class="um">
+      <h2 id="uname">—</h2>
+      <p id="uemail">—</p>
+    </div>
+  </div>
+  <div class="sgrid" id="sgrid"></div>
+  <div class="tabs" id="tabs"></div>
+  <div id="panels"></div>
+</div>
+
+<div id="jmodal">
+  <div class="jpanel">
+    <div class="jhead">
+      <span id="jtitle">fichier.json</span>
+      <button id="jclose">✕</button>
+    </div>
+    <div id="jcontent"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════════
+function esc(s){
+  if(typeof s!=='string')return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function tsDate(ts){
+  if(!ts)return '';
+  try{return new Date(ts*1000).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'});}catch(e){return '';}
+}
+function fmtSize(b){
+  if(b>1048576)return (b/1048576).toFixed(1)+'MB';
+  if(b>1024)return Math.round(b/1024)+'KB';
+  return b+'B';
+}
+function findFile(parsed,...terms){
+  for(const t of terms)
+    for(const[k,v]of Object.entries(parsed))
+      if(k.toLowerCase().includes(t.toLowerCase())&&v!==null)return v;
+  return null;
+}
+function extractArr(data,...keys){
+  if(Array.isArray(data))return data;
+  if(!data||typeof data!=='object')return[];
+  for(const k of keys)if(Array.isArray(data[k]))return data[k];
+  for(const v of Object.values(data))if(Array.isArray(v)&&v.length)return v;
+  return[];
+}
+function personFromItem(item){
+  let name='',href='',ts=null;
+  if(item?.string_list_data?.length){
+    const d=item.string_list_data[0];
+    name=d.value||'';href=d.href||'';ts=d.timestamp||null;
+  }else if(item?.string_map_data){
+    const d=Object.values(item.string_map_data)[0]||{};
+    name=d.value||'';href=d.href||'';ts=d.timestamp||null;
+  }else if(typeof item==='string'){name=item;}
+  else{
+    for(const k of['value','username'])if(typeof item[k]==='string'){name=item[k];break;}
+    if(!name)for(const v of Object.values(item||{}))if(typeof v==='string'){name=v;break;}
+    for(const k of['timestamp','time'])if(typeof item[k]==='number'){ts=item[k];break;}
+  }
+  const user=name||href.split('/').filter(Boolean).pop()||'?';
+  return{name:user.toLowerCase(),display:user,href,ts};
+}
+
+// ═══════════════════════════════════════════════════════════
+// JSON CACHE & MODAL (event delegation — no inline onclick)
+// ═══════════════════════════════════════════════════════════
+const cache={};
+document.getElementById('jclose').addEventListener('click',()=>document.getElementById('jmodal').classList.remove('open'));
+document.getElementById('jmodal').addEventListener('click',e=>{if(e.target===document.getElementById('jmodal'))document.getElementById('jmodal').classList.remove('open');});
+document.addEventListener('click',e=>{
+  const row=e.target.closest('[data-jsonpath]');
+  if(!row)return;
+  const path=row.dataset.jsonpath;
+  if(!cache[path])return;
+  document.getElementById('jtitle').textContent=path.split('/').pop();
+  document.getElementById('jcontent').textContent=JSON.stringify(cache[path],null,2);
+  document.getElementById('jmodal').classList.add('open');
+});
+
+// ═══════════════════════════════════════════════════════════
+// FILE UPLOAD
+// ═══════════════════════════════════════════════════════════
+const dropEl=document.getElementById('drop-area');
+const fiEl=document.getElementById('fi');
+dropEl.addEventListener('dragover',e=>{e.preventDefault();dropEl.classList.add('over');});
+dropEl.addEventListener('dragleave',()=>dropEl.classList.remove('over'));
+dropEl.addEventListener('drop',e=>{e.preventDefault();dropEl.classList.remove('over');loadZip(e.dataTransfer.files[0]);});
+fiEl.addEventListener('change',()=>loadZip(fiEl.files[0]));
+
+async function loadZip(file){
+  if(!file)return;
+  dropEl.style.display='none';
+  document.querySelector('.pbox').style.display='none';
+  document.getElementById('loader').style.display='block';
+  try{
+    const zip=await JSZip.loadAsync(file);
+    const parsed={},allFiles=[];
+    for(const[path,entry]of Object.entries(zip.files)){
+      if(entry.dir)continue;
+      const sz=entry._data?.uncompressedSize||0;
+      allFiles.push({path,sz});
+      if(path.endsWith('.json')){
+        try{
+          const txt=await entry.async('string');
+          parsed[path]=JSON.parse(txt);
+          cache[path]=parsed[path];
+        }catch(e){parsed[path]=null;}
+      }
+    }
+    document.getElementById('loader').style.display='none';
+    renderDashboard(parsed,allFiles);
+  }catch(err){
+    document.getElementById('loader').style.display='none';
+    dropEl.style.display='block';
+    document.querySelector('.pbox').style.display='block';
+    alert('Erreur de lecture du ZIP : '+err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════
+function renderDashboard(parsed,allFiles){
+  document.getElementById('dashboard').style.display='block';
+
+  // Personal info
+  const pi=findFile(parsed,'personal_information','account_information','profile_user');
+  let username='',email='',name='';
+  if(pi){
+    const src=pi.profile_user||pi.account_information||pi;
+    const arr=Array.isArray(src)?src[0]:src;
+    const m=arr?.string_map_data||{};
+    username=m.Username?.value||m['Nom d\'utilisateur']?.value||'';
+    email=m.Email?.value||m['E-mail']?.value||'';
+    name=m.Name?.value||m.Nom?.value||'';
+  }
+  const dn=name||username||'Instagram';
+  document.getElementById('av').textContent=dn.slice(0,2).toUpperCase();
+  document.getElementById('uname').textContent=name?`${name}  @${username}`:`@${username||'—'}`;
+  document.getElementById('uemail').textContent=email||'email non trouvé';
+
+  // Followers — collect ALL followers_N.json files (Instagram splits by 1000)
+  // Match filename exactly: followers.json or followers_1.json, followers_2.json…
+  // Never match paths that contain /following/ (avoids followers_and_following/ confusion)
+  const followers=[];
+  for(const[k,v]of Object.entries(parsed)){
+    const fname=k.split('/').pop()||'';
+    if(/^followers(_\d+)?\.json$/i.test(fname)&&v!==null){
+      const arr=Array.isArray(v)?v:extractArr(v,'followers','relationships_followers');
+      followers.push(...arr);
+    }
+  }
+
+  // Following — must be named following.json inside a /following/ folder
+  // or at minimum end with /following.json, to avoid matching followers_and_following/followers_N.json
+  let fwgRaw=null;
+  for(const[k,v]of Object.entries(parsed)){
+    const parts=k.split('/');
+    const fname=parts.pop()||'';
+    const parentDir=parts[parts.length-1]||'';
+    if(fname==='following.json'&&parentDir==='following'&&v!==null){fwgRaw=v;break;}
+  }
+  if(!fwgRaw){
+    for(const[k,v]of Object.entries(parsed)){
+      if(k.endsWith('/following.json')&&v!==null){fwgRaw=v;break;}
+    }
+  }
+  const following=extractArr(fwgRaw?.relationships_following||fwgRaw,'following','relationships_following');
+
+  const postsRaw=findFile(parsed,'posts_1','media','your_posts');
+  const posts=Array.isArray(postsRaw)?postsRaw:(postsRaw?[postsRaw]:[]);
+  const likedRaw=findFile(parsed,'liked_posts','post_likes');
+  const liked=extractArr(likedRaw?.likes_media_likes||likedRaw,'likes_media_likes','media_likes');
+  const commRaw=findFile(parsed,'post_comments','comments_1');
+  let comments=[];
+  if(commRaw){
+    if(Array.isArray(commRaw))comments=commRaw;
+    else if(commRaw.comments_media_comments)comments=commRaw.comments_media_comments;
+    else{const v=Object.values(commRaw);if(Array.isArray(v[0]))comments=v[0];}
+  }
+
+  // Ghost computation
+  const fwrPeople=followers.map(personFromItem);
+  const fwgPeople=following.map(personFromItem);
+  const fwrSet=new Set(fwrPeople.map(p=>p.name));
+  const fwgSet=new Set(fwgPeople.map(p=>p.name));
+  const ghosts=fwgPeople.filter(p=>p.name!=='?'&&!fwrSet.has(p.name));
+  const notBack=fwrPeople.filter(p=>p.name!=='?'&&!fwgSet.has(p.name));
+
+  // Stats
+  document.getElementById('sgrid').innerHTML=[
+    {l:'Abonnés',v:followers.length,c:'g'},
+    {l:'Abonnements',v:following.length,c:''},
+    {l:'Fantômes 👻',v:ghosts.length,c:'r'},
+    {l:'Publications',v:posts.length,c:'p'},
+    {l:'Posts likés',v:liked.length,c:'gr'},
+    {l:'Commentaires',v:comments.length,c:''},
+  ].map(s=>`<div class="sc"><div class="sl">${s.l}</div><div class="sv ${s.c}">${s.v.toLocaleString('fr-FR')}</div></div>`).join('');
+
+  // Tabs
+  const tabs=[
+    {id:'ghost',label:'Non Mutuals',count:ghosts.length,ghost:true},
+    {id:'fwr',label:'Abonnés',count:followers.length},
+    {id:'fwg',label:'Abonnements',count:following.length},
+    {id:'posts',label:'Publications',count:posts.length},
+    {id:'liked',label:'Likés',count:liked.length},
+    {id:'comm',label:'Commentaires',count:comments.length},
+    {id:'files',label:'Fichiers',count:allFiles.length},
+  ];
+  const tabsEl=document.getElementById('tabs');
+  const panelsEl=document.getElementById('panels');
+  tabsEl.innerHTML=tabs.map((t,i)=>`<button class="tb ${t.ghost?'ghost-tab':''} ${i===0?'on':''}" data-tab="${esc(t.id)}">${t.label} <span style="font-size:10px;opacity:.55">${t.count}</span></button>`).join('');
+  panelsEl.innerHTML=tabs.map((t,i)=>`<div class="panel ${i===0?'on':''}" id="p-${t.id}"></div>`).join('');
+  tabsEl.querySelectorAll('.tb').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      tabsEl.querySelectorAll('.tb').forEach(b=>b.classList.remove('on'));
+      panelsEl.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
+      btn.classList.add('on');
+      document.getElementById('p-'+btn.dataset.tab).classList.add('on');
+    });
+  });
+
+  renderGhosts(ghosts,notBack);
+  renderPersonPanel('p-fwr',fwrPeople,'abonnés');
+  renderPersonPanel('p-fwg',fwgPeople,'abonnements');
+  renderPosts(posts);
+  renderLiked(liked);
+  renderComments(comments);
+  renderFiles(allFiles);
+}
+
+// ═══════════════════════════════════════════════════════════
+// GHOST PANEL
+// ═══════════════════════════════════════════════════════════
+function renderGhosts(ghosts,notBack){
+  const el=document.getElementById('p-ghost');
+  const ghostCards=(list,cls='')=>list.map(p=>`
+    <div class="gc ${cls}">
+      <div class="gcn">@${esc(p.display)}</div>
+      ${p.href?`<a class="gcl" href="${esc(p.href)}" target="_blank" rel="noopener noreferrer">${esc(p.href.replace('https://www.instagram.com/',''))}</a>`:''}
+      <div class="gcd">${tsDate(p.ts)||'suivi depuis inconnu'}</div>
+    </div>`).join('');
+
+  el.innerHTML=`
+    <div class="ghero">
+      <div class="gicon">👻</div>
+      <div class="gtext">
+        <h3>Accounts you follow that do not follow back</h3>
+        <p>Tu les suis, mais ils ne te suivent pas en retour.<br>Relationship overview based on your archive.</p>
+      </div>
+      <div class="gcnt">
+        <div class="num">${ghosts.length}</div>
+        <div class="lbl">comptes</div>
+      </div>
+    </div>
+
+    <div class="sb"><input type="text" id="gsearch" placeholder="Rechercher parmi les fantômes…"></div>
+
+    <div class="sublabel">Tu les suis — ils te suivent pas (${ghosts.length})</div>
+    <div class="ggrid" id="glist">
+      ${ghosts.length?ghostCards(ghosts):'<div class="empty" style="grid-column:1/-1">Tout le monde te follow back 🎉</div>'}
+    </div>
+
+    ${notBack.length?`
+    <div class="sublabel" style="margin-top:2rem">Ils te suivent — tu les suis pas (${notBack.length})</div>
+    <div class="ggrid">${ghostCards(notBack,'blue')}</div>
+    `:''}`;
+
+  document.getElementById('gsearch').addEventListener('input',e=>{
+    const q=e.target.value.toLowerCase();
+    document.querySelectorAll('#glist .gc').forEach(c=>{
+      c.style.display=(!q||c.querySelector('.gcn').textContent.toLowerCase().includes(q))?'':'none';
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// PERSON PANEL
+// ═══════════════════════════════════════════════════════════
+function renderPersonPanel(id,people,label){
+  const el=document.getElementById(id);
+  if(!people.length){el.innerHTML=`<div class="empty">Aucun ${label} trouvé.</div>`;return;}
+  const lid='l'+id.replace(/[^a-z]/g,'');
+  el.innerHTML=`
+    <div class="sb"><input type="text" placeholder="Rechercher…" data-list="${lid}"></div>
+    <div class="seclab">${people.length} ${label}</div>
+    <div class="plist" id="${lid}">
+      ${people.slice(0,1000).map(p=>`<div class="pi" data-n="${esc(p.name)}"><div class="pin">@${esc(p.display)}</div><div class="pid">${tsDate(p.ts)}</div></div>`).join('')}
+      ${people.length>1000?`<div class="pi"><div class="pin" style="color:var(--mu)">+${people.length-1000} autres…</div></div>`:''}
+    </div>`;
+  el.querySelector('input').addEventListener('input',e=>{
+    const q=e.target.value.toLowerCase();
+    document.querySelectorAll(`#${lid} .pi`).forEach(c=>{c.style.display=(!q||(c.dataset.n||'').includes(q))?'':'none';});
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// POSTS
+// ═══════════════════════════════════════════════════════════
+function renderPosts(posts){
+  const el=document.getElementById('p-posts');
+  if(!posts.length){el.innerHTML='<div class="empty">Aucune publication trouvée.</div>';return;}
+  el.innerHTML=`<div class="seclab">${posts.length} publications</div><div class="pgrid">${
+    posts.map(p=>{
+      const m=Array.isArray(p.media)?p.media[0]:p;
+      const cap=m?.title||m?.caption||p.title||'(sans légende)';
+      const ts=m?.creation_timestamp||p.creation_timestamp;
+      return `<div class="pc"><div class="pcc">${esc(cap)}</div><div class="pcm"><span>${tsDate(ts)}</span></div></div>`;
+    }).join('')
+  }</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// LIKED
+// ═══════════════════════════════════════════════════════════
+function renderLiked(liked){
+  const el=document.getElementById('p-liked');
+  if(!liked.length){el.innerHTML='<div class="empty">Aucun post liké trouvé.</div>';return;}
+  el.innerHTML=`<div class="seclab">${liked.length} posts likés</div><div class="plist">
+    ${liked.slice(0,400).map(item=>{
+      const p=personFromItem(item);
+      const title=item.title||'';
+      const display=title||p.href?.split('/').filter(Boolean).pop()||p.display;
+      return `<div class="pi"><div class="pin">${esc(display)}</div><div class="pid">${tsDate(p.ts)}</div></div>`;
+    }).join('')}
+    ${liked.length>400?`<div class="pi"><div class="pin" style="color:var(--mu)">+${liked.length-400} autres…</div></div>`:''}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// COMMENTS
+// ═══════════════════════════════════════════════════════════
+function renderComments(comments){
+  const el=document.getElementById('p-comm');
+  if(!comments.length){el.innerHTML='<div class="empty">Aucun commentaire trouvé.</div>';return;}
+  el.innerHTML=`<div class="seclab">${comments.length} commentaires</div><div class="pgrid">
+    ${comments.slice(0,200).map(c=>{
+      const d=c.string_map_data||c;
+      const text=d.Comment?.value||d.comment||personFromItem(c).display;
+      const ts=c.timestamp;
+      const owner=d['Media Owner']?.value||'';
+      return `<div class="pc"><div class="pcc">${esc(text)}</div><div class="pcm"><span>${tsDate(ts)}</span>${owner?`<span class="pt">@${esc(owner)}</span>`:''}</div></div>`;
+    }).join('')}
+    ${comments.length>200?`<div class="pc"><div class="pcc" style="color:var(--mu)">+${comments.length-200} autres…</div></div>`:''}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// FILES
+// ═══════════════════════════════════════════════════════════
+function renderFiles(allFiles){
+  const el=document.getElementById('p-files');
+  el.innerHTML=`
+    <div class="sb"><input type="text" id="fsearch" placeholder="Rechercher un fichier…"></div>
+    <div class="seclab">${allFiles.length} fichiers dans le zip</div>
+    <div class="ftree" id="ftree">
+      ${allFiles.sort((a,b)=>a.path.localeCompare(b.path)).map(f=>{
+        const isJ=f.path.endsWith('.json');
+        const clickable=isJ&&cache[f.path];
+        const icon=isJ?'📄':f.path.match(/\.(jpg|jpeg|png|mp4|mov)$/i)?'🖼':'📁';
+        return `<div class="fr ${clickable?'click':''}" data-path="${esc(f.path)}" ${clickable?`data-jsonpath="${esc(f.path)}"`:''}  title="${esc(f.path)}">
+          <span class="fi">${icon}</span><span class="fn">${esc(f.path)}</span><span class="fs">${fmtSize(f.sz)}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  document.getElementById('fsearch').addEventListener('input',e=>{
+    const q=e.target.value.toLowerCase();
+    document.querySelectorAll('#ftree .fr').forEach(r=>{r.style.display=(r.dataset.path||'').toLowerCase().includes(q)?'':'none';});
+  });
+}
+</script>
+
+<footer style="padding:2rem;text-align:center;color:#777;font-size:12px;border-top:1px solid rgba(255,255,255,0.06);margin-top:3rem">
+This project is an independent unofficial tool and is not affiliated with, endorsed by, or associated with Instagram or Meta.
+</footer>
+
+</body>
+</html>
